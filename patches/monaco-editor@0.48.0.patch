@@ -1,0 +1,83 @@
+diff --git a/esm/vs/basic-languages/monaco.contribution.js b/esm/vs/basic-languages/monaco.contribution.js
+index 27a6a8e530ca1d406496f8472111e54c340369a8..731c31efb4ec04c2067ead6f8c711d7e0c106fe3 100644
+--- a/esm/vs/basic-languages/monaco.contribution.js
++++ b/esm/vs/basic-languages/monaco.contribution.js
+@@ -87,4 +87,5 @@ import "./typescript/typescript.contribution.js";
+ import "./vb/vb.contribution.js";
+ import "./wgsl/wgsl.contribution.js";
+ import "./xml/xml.contribution.js";
++import "./xwlog/xwlog.contribution.js";
+ import "./yaml/yaml.contribution.js";
+diff --git a/esm/vs/basic-languages/xwlog/xwlog.contribution.d.ts b/esm/vs/basic-languages/xwlog/xwlog.contribution.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..336ce12bb9106afdf843063ee67c0c1970f70d37
+--- /dev/null
++++ b/esm/vs/basic-languages/xwlog/xwlog.contribution.d.ts
+@@ -0,0 +1 @@
++export {}
+diff --git a/esm/vs/basic-languages/xwlog/xwlog.contribution.js b/esm/vs/basic-languages/xwlog/xwlog.contribution.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..897c4ad10e993495cb0355fe4c553493fcdfb712
+--- /dev/null
++++ b/esm/vs/basic-languages/xwlog/xwlog.contribution.js
+@@ -0,0 +1,12 @@
++/*!-----------------------------------------------------------------------------
++ * Copyright (c) Microsoft Corporation. All rights reserved.
++ * Released under the MIT license
++ *-----------------------------------------------------------------------------*/
++
++import { registerLanguage } from "../_.contribution.js";
++registerLanguage({
++  id: "xwlog",
++  extensions: [".log"],
++  aliases: ["XWLog", "xwlog"],
++  loader: () => import("./xwlog.js")
++});
+\ No newline at end of file
+diff --git a/esm/vs/basic-languages/xwlog/xwlog.js b/esm/vs/basic-languages/xwlog/xwlog.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..52603d1120415663bf2befa86f7e595f6c364c61
+--- /dev/null
++++ b/esm/vs/basic-languages/xwlog/xwlog.js
+@@ -0,0 +1,41 @@
++/*!-----------------------------------------------------------------------------
++ * Copyright (c) Microsoft Corporation. All rights reserved.
++ * Released under the MIT license
++ *-----------------------------------------------------------------------------*/
++
++var language = {
++    defaultToken: '',
++    tokenPostfix: '.log',
++    
++    keywords: [
++      "任务完成，用时："
++    ],
++  
++    tokenizer: {
++      root: [
++        // 日期和时间匹配（注释）
++        [/(\d{4}[\.\/-]\d{2}[\.\/-]\d{2})|(\d{2}:\d{2}:\d{2})/, 'comment'],
++        
++        // 关键字匹配
++        ["任务完成，用时：", 'keyword'],
++        
++        // 数字+ms格式（字符串）
++        [/\d+\.\d+ms/, 'string'],
++        
++        // 其他内容不匹配
++        [/./, '']  // 忽略其他字符
++      ]
++    }
++  };
++  
++  var conf = {
++    comments: {
++      lineComment: null,
++      blockComment: null
++    },
++    brackets: [],
++    autoClosingPairs: [],
++    surroundingPairs: []
++  };
++  
++  export { conf, language };

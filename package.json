@@ -1,0 +1,37 @@
+{
+  "name": "xuanwu-ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@kobalte/core": "^0.13.9",
+    "@solidjs/router": "^0.15.3",
+    "@tailwindcss/forms": "^0.5.10",
+    "axios": "^1.7.9",
+    "dayjs": "^1.11.13",
+    "solid-icons": "^1.1.0",
+    "solid-js": "^1.9.4",
+    "solid-monaco": "^0.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.8",
+    "autoprefixer": "10.4.16",
+    "postcss": "8.4.33",
+    "postcss-nesting": "^13.0.1",
+    "tailwindcss": "3.4.1",
+    "terser": "^5.39.0",
+    "typescript": "~5.7.2",
+    "vite": "^6.1.0",
+    "vite-plugin-solid": "^2.11.0"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "monaco-editor@0.48.0": "patches/monaco-editor@0.48.0.patch"
+    }
+  }
+}

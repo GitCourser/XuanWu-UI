@@ -1,0 +1,63 @@
+name: Build and Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        format: [tar.gz, zip]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Get version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+    - name: Set version
+      run: |
+        echo "Version: $VERSION"
+        sed -i "s/\"version\": \"0.0.0\"/\"version\": \"$VERSION\"/" package.json
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 10
+        run_install: false
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Build project
+      run: pnpm build
+
+    - name: Create release archive
+      run: |
+        if [ "${{ matrix.format }}" = "tar.gz" ]; then
+          tar -czvf xuanwu-ui.${{ matrix.format }} dist/
+        else
+          zip -r xuanwu-ui.${{ matrix.format }} dist/
+        fi
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./xuanwu-ui.${{ matrix.format }}
+        asset_name: xuanwu-ui.${{ matrix.format }}
+        asset_content_type: ${{ format(matrix.format == 'tar.gz' && 'application/gzip' || 'application/zip') }}

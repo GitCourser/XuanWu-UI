@@ -1,0 +1,532 @@
+import { createSignal, createEffect, For, onMount } from 'solid-js';
+import { MonacoEditor } from 'solid-monaco';
+import { configureMonaco, getLanguageByExtension, getDefaultEditorOptions, setEditorTheme, getEditorTheme } from '../../utils/monaco-utils';
+import { useTheme } from '../../stores/theme';
+
+interface FileItem {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  updated_at: string;
+  children?: FileItem[];
+  expanded?: boolean;
+}
+
+interface UploadFailedItem {
+  name: string;
+  error: string;
+}
+
+interface UploadResponse {
+  code: number;
+  data: {
+    success: string[];
+    failed: UploadFailedItem[];
+  };
+}
+
+const FilePage = () => {
+  const [files, setFiles] = createSignal<FileItem[]>([]);
+  const [currentPath, setCurrentPath] = createSignal('');
+  const [loading, setLoading] = createSignal(true);
+  const [error, setError] = createSignal('');
+  const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
+  const [fileContent, setFileContent] = createSignal('');
+  const [isEditing, setIsEditing] = createSignal(false);
+  const [saving, setSaving] = createSignal(false);
+  const [showNewFolderDialog, setShowNewFolderDialog] = createSignal(false);
+  const [newFolderName, setNewFolderName] = createSignal('');
+  const [isDragging, setIsDragging] = createSignal(false);
+  const { isDark } = useTheme();
+  const [successMessage, setSuccessMessage] = createSignal('');
+
+  // 初始化Monaco配置
+  onMount(() => {
+    configureMonaco();
+  });
+
+  // 加载文件列表
+  const loadFiles = async (path: string = '') => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/file/list?path=${encodeURIComponent(path)}`);
+      const data = await response.json();
+      if (data.code === 0) {
+        const processedFiles = data.data?.map((file: FileItem) => ({
+          ...file,
+          expanded: false,
+          children: file.is_dir ? [] : undefined
+        })) || [];
+        if (path === '') {
+          setFiles(processedFiles);
+        } else {
+          // 更新目录树中的子目录
+          updateFileTree(files(), path, processedFiles);
+          setFiles([...files()]);
+        }
+        setCurrentPath(path);
+      } else {
+        setError('加载文件列表失败');
+      }
+    } catch (err) {
+      setError('加载文件列表失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 更新文件树
+  const updateFileTree = (tree: FileItem[], path: string, newChildren: FileItem[]) => {
+    for (const file of tree) {
+      if (file.path === path) {
+        file.children = newChildren;
+        file.expanded = true;
+        return true;
+      }
+      if (file.children && updateFileTree(file.children, path, newChildren)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // 切换目录展开状态
+  const toggleDir = async (file: FileItem) => {
+    if (file.is_dir) {
+      if (!file.expanded || (!file.children || file.children.length === 0)) {
+        await loadFiles(file.path);
+      } else {
+        file.expanded = !file.expanded;
+        setFiles([...files()]);
+      }
+    } else {
+      loadFileContent(file.path);
+    }
+  };
+
+  // 加载文件内容
+  const loadFileContent = async (path: string) => {
+    try {
+      setLoading(true);
+      setIsEditing(false);
+      const response = await fetch(`/api/file/content?path=${encodeURIComponent(path)}`);
+      const data = await response.json();
+      if (data.code === 0) {
+        setFileContent(data.data);
+        setSelectedFile(path);
+      } else {
+        setError(data.message);
+      }
+    } catch (err) {
+      setError('加载文件内容失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 下载文件
+  const downloadFile = async () => {
+    if (!selectedFile()) {
+      setError('请先选择一个文件');
+      return;
+    }
+
+    const filePath = selectedFile() as string;
+    if (filePath) {
+      window.open(`/api/file/download?path=${encodeURIComponent(filePath)}`, '_blank');
+    }
+  };
+
+  // 删除文件
+  const deleteFile = async () => {
+    if (!selectedFile()) {
+      setError('请先选择一个文件');
+      return;
+    }
+
+    if (!confirm('确定要删除此文件吗？此操作不可恢复。')) {
+      return;
+    }
+
+    try {
+      const filePath = selectedFile() as string;
+      const parentPath = filePath.split('/').slice(0, -1).join('/');
+
+      const response = await fetch(`/api/file/delete?path=${encodeURIComponent(filePath)}`);
+      const data = await response.json();
+      if (data.code === 0) {
+        // 如果删除的文件在当前目录下，刷新当前目录
+        // 否则刷新父目录
+        if (filePath.startsWith(currentPath())) {
+          loadFiles(currentPath());
+        } else {
+          loadFiles(parentPath);
+        }
+        setSelectedFile(null);
+        setFileContent('');
+      } else {
+        setError('删除文件失败');
+      }
+    } catch (err) {
+      setError('删除文件失败');
+    }
+  };
+
+  // 切换编辑模式
+  const toggleEditMode = () => {
+    if (!selectedFile()) {
+      setError('请先选择一个文件');
+      return;
+    }
+    setIsEditing(!isEditing());
+  };
+
+  // 保存文件
+  const saveFile = async () => {
+    if (!selectedFile()) {
+      setError('请先选择一个文件');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError('');
+
+      const response = await fetch('/api/file/edit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          path: selectedFile(),
+          content: fileContent()
+        }),
+      });
+
+      const data = await response.json();
+      if (data.code !== 0) {
+        setError(data.message);
+      } else {
+        setIsEditing(false);
+      }
+    } catch (err) {
+      setError('保存文件失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 创建新文件夹
+  const createNewFolder = async () => {
+    if (!newFolderName()) {
+      setError('请输入文件夹名称');
+      return;
+    }
+
+    try {
+      const folderPath = currentPath() ? `${currentPath()}/${newFolderName()}` : newFolderName();
+      const response = await fetch('/api/file/mkdir', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          path: folderPath
+        }),
+      });
+
+      const data = await response.json();
+      if (data.code === 0) {
+        setShowNewFolderDialog(false);
+        setNewFolderName('');
+        // 刷新当前目录
+        loadFiles(currentPath());
+      } else {
+        setError(data.message);
+      }
+    } catch (err) {
+      setError('创建文件夹失败');
+    }
+  };
+
+  // 渲染文件树节点
+  const FileTreeNode = (props: { file: FileItem; level: number }) => {
+    return (
+      <div style={{ "padding-left": `${props.level * 1.5}rem` }}>
+        <div
+          class={`p-2 rounded-md cursor-pointer hover:bg-muted/50 ${
+            selectedFile() === props.file.path ? 'bg-muted' : ''
+          }`}
+          onClick={() => toggleDir(props.file)}
+        >
+          <div class="flex items-center">
+            <span class="mr-2">
+              {props.file.is_dir
+                ? props.file.expanded
+                  ? '📂'
+                  : '📁'
+                : '📄'}
+            </span>
+            <span class="text-sm">{props.file.name}</span>
+          </div>
+        </div>
+        {props.file.expanded && props.file.children && (
+          <For each={props.file.children}>
+            {(child) => <FileTreeNode file={child} level={props.level + 1} />}
+          </For>
+        )}
+      </div>
+    );
+  };
+
+  // 获取当前文件的语言
+  const getCurrentLanguage = () => {
+    const filePath = selectedFile();
+    if (!filePath) return 'plaintext';
+    return getLanguageByExtension(filePath);
+  };
+
+  // 首次加载
+  createEffect(() => {
+    loadFiles();
+  });
+
+  // 编辑器挂载
+  const handleEditorMount = (monaco: any) => {
+    setEditorTheme(monaco, isDark());
+  };
+
+  // 处理文件拖放
+  const handleDrop = async (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    setError('');
+    setSuccessMessage('');
+
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length === 0) return;
+
+    try {
+      const formData = new FormData();
+      files.forEach(file => {
+        formData.append('files[]', file);
+      });
+      
+      if (currentPath()) {
+        formData.append('path', currentPath());
+      }
+
+      const response = await fetch('/api/file/batch-upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data: UploadResponse = await response.json();
+      if (data.code === 0) {
+        // 分别显示成功和失败消息
+        if (data.data.success.length > 0) {
+          setSuccessMessage(`上传成功：${data.data.success.join(', ')}`);
+        }
+        if (data.data.failed && data.data.failed.length > 0) {
+          setError(`上传失败：${data.data.failed.map(item => item.name).join(', ')}`);
+        }
+        // 刷新当前目录
+        loadFiles(currentPath());
+      } else {
+        setError('上传失败');
+      }
+    } catch (err) {
+      setError('文件上传失败');
+    }
+  };
+
+  // 处理拖放相关事件
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  return (
+    <div>
+      {/* 顶部操作栏 */}
+      <div class="mb-6 flex justify-between items-center">
+        <h2 class="text-2xl font-bold">文件管理</h2>
+        <div class="flex space-x-2">
+          <button 
+            class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+            onClick={() => setShowNewFolderDialog(true)}
+          >
+            新建文件夹
+          </button>
+          {selectedFile() && (
+            <>
+              <button
+                class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                onClick={downloadFile}
+              >
+                下载
+              </button>
+              <button
+                class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                onClick={toggleEditMode}
+              >
+                {isEditing() ? '取消编辑' : '编辑'}
+              </button>
+              {isEditing() && (
+                <button
+                  class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                  onClick={saveFile}
+                  disabled={saving()}
+                >
+                  {saving() ? '保存中...' : '保存'}
+                </button>
+              )}
+              <button
+                class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90"
+                onClick={deleteFile}
+              >
+                删除
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 消息提示 */}
+      <div>
+        {successMessage() && (
+          <div class="mb-4 p-4 bg-green-500/10 text-green-600 rounded-md">
+            {successMessage()}
+          </div>
+        )}
+        {error() && (
+          <div class="mb-4 p-4 bg-destructive/10 text-destructive rounded-md">
+            {error()}
+          </div>
+        )}
+      </div>
+
+      {/* 文件管理器 */}
+      <div class={`grid grid-cols-12 gap-6 ${successMessage() || error() ? 'h-[calc(100vh-12rem)]' : 'h-[calc(100vh-7rem)]'}`}>
+        {/* 左侧文件树 */}
+        <div 
+          class={`col-span-4 bg-card rounded-lg shadow overflow-hidden flex flex-col ${
+            isDragging() ? 'ring-2 ring-primary ring-offset-2' : ''
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <div class="shrink-0 p-4 border-b border-border">
+            <button
+              class="text-sm text-blue-400 hover:underline"
+              onClick={() => loadFiles('')}
+            >
+              根目录
+            </button>
+            {currentPath() && (
+              <>
+                <span class="mx-2">/</span>
+                <span class="text-sm text-primary-foreground">
+                  {currentPath()}
+                </span>
+              </>
+            )}
+          </div>
+
+          <div class="flex-1 overflow-auto p-4">
+            {loading() ? (
+              <div class="text-center text-muted-foreground">
+                加载中...
+              </div>
+            ) : (
+              <div class="space-y-1">
+                <For each={files()}>
+                  {(file) => <FileTreeNode file={file} level={0} />}
+                </For>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 右侧文件内容 */}
+        <div class="col-span-8 bg-card rounded-lg shadow overflow-hidden flex flex-col">
+          <div class="flex-1 overflow-auto">
+            {selectedFile() ? (
+              loading() ? (
+                <div class="p-8 text-center text-muted-foreground">
+                  加载中...
+                </div>
+              ) : (
+                <MonacoEditor
+                  value={fileContent()}
+                  onChange={(value) => setFileContent(value)}
+                  language={getCurrentLanguage()}
+                  theme={getEditorTheme(isDark())}
+                  options={getDefaultEditorOptions(!isEditing())}
+                  onMount={handleEditorMount}
+                />
+              )
+            ) : (
+              <div class="p-8 text-center text-muted-foreground">
+                选择文件查看内容<br/>
+                拖放文件到目录树上传<br/>
+                根目录是指玄武程序的数据目录<br/>
+                新建与上传路径就是目录树上面显示的打开路径
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 新建文件夹对话框 */}
+      {showNewFolderDialog() && (
+        <div 
+          class="fixed inset-0 bg-black/50 flex items-center justify-center"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowNewFolderDialog(false);
+              setNewFolderName('');
+            }
+          }}
+        >
+          <div class="bg-background p-6 rounded-lg shadow-lg w-[80vw] max-w-md">
+            <h3 class="text-lg font-semibold mb-4">新建文件夹</h3>
+            <input
+              type="text"
+              class="w-full px-3 py-2 rounded-md border border-border bg-background"
+              placeholder="请输入文件夹名称"
+              value={newFolderName()}
+              onInput={(e) => setNewFolderName(e.currentTarget.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  createNewFolder();
+                }
+              }}
+            />
+            <div class="flex justify-end gap-2 mt-4">
+              <button
+                type="submit"
+                class="px-4 py-2 bg-primary text-white rounded-md text-sm"
+                onClick={createNewFolder}
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default FilePage; 
