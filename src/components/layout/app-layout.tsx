@@ -205,7 +205,7 @@ const AppLayout: Component<Props> = (props) => {
                 </div>
                 <div class="flex items-center justify-between p-2">
                   <span class="text-sm">admin</span>
-                  <button class="text-sm text-destructive hover:text-destructive/90">
+                  <button onClick={handleLogout} class="text-sm text-destructive hover:text-destructive/90">
                     退出
                   </button>
                 </div>

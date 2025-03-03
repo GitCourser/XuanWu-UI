@@ -1,15 +1,7 @@
 import { createSignal } from 'solid-js';
 import { auth } from '../../stores/auth';
 import { useTheme } from '../../stores/theme';
-
-// SHA256加密函数
-const sha256 = async (message: string) => {
-  const msgBuffer = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex;
-};
+import { sha256 } from '../../utils/crypto';
 
 const Login = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -22,9 +14,24 @@ const Login = () => {
     setError('');
 
     try {
-      // 对密码进行SHA256加密
-      const hashedPassword = await sha256(password());
+      console.log('开始登录流程');
+      if (!username() || !password()) {
+        setError('用户名和密码不能为空');
+        return;
+      }
+
+      console.log('开始密码加密');
+      let hashedPassword;
+      try {
+        hashedPassword = await sha256(password());
+        console.log('密码加密完成');
+      } catch (encryptError) {
+        console.error('密码加密失败:', encryptError);
+        setError('系统错误，请刷新页面重试');
+        return;
+      }
       
+      console.log('准备发送登录请求');
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -36,14 +43,18 @@ const Login = () => {
         }),
       });
 
+      console.log('收到响应');
       const data = await response.json();
       if (data.code === 0) {
+        console.log('登录成功');
         auth.login(data.data.token);
         window.location.href = '/';
       } else {
+        console.log('登录失败:', data.message);
         setError(data.message || '登录失败');
       }
     } catch (err) {
+      console.error('登录过程出错:', err);
       setError('网络错误，请稍后重试');
     }
   };

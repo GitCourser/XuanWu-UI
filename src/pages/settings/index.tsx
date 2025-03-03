@@ -1,14 +1,6 @@
 import { createSignal, createEffect } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-
-// SHA256加密函数
-const sha256 = async (message: string) => {
-  const msgBuffer = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex;
-};
+import { sha256 } from '../../utils/crypto';
 
 interface Profile {
   username: string;
