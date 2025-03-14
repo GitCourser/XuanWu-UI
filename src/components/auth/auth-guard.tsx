@@ -16,7 +16,7 @@ const AuthGuard: Component<Props> = (props) => {
       const data = await response.json();
       const isAuth = data.code === 0;
       setIsAuthenticated(isAuth);
-      
+
       if (!isAuth) {
         navigate('/login', { replace: true });
       }
@@ -39,4 +39,4 @@ const AuthGuard: Component<Props> = (props) => {
   );
 };
 
-export default AuthGuard; 
+export default AuthGuard;

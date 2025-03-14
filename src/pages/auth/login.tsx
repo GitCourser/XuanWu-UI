@@ -30,7 +30,7 @@ const Login = () => {
         setError('系统错误，请刷新页面重试');
         return;
       }
-      
+
       console.log('准备发送登录请求');
       const response = await fetch('/api/auth/login', {
         method: 'POST',
@@ -73,9 +73,9 @@ const Login = () => {
         </div>
         <div class="bg-card border border-border shadow-lg rounded-lg">
           <div class="px-8 py-6 bg-secondary/50 rounded-t-lg border-b border-border">
-            <h2 class="text-2xl font-bold text-center text-card-foreground">玄武系统登录</h2>
+            <h2 class="text-2xl font-bold text-center text-card-foreground">登录</h2>
           </div>
-          
+
           <form onSubmit={handleSubmit} class="px-8 py-6">
             <div class="mb-4">
               <label class="block text-card-foreground text-sm font-bold mb-2" for="username">
@@ -90,7 +90,7 @@ const Login = () => {
                 onInput={(e) => setUsername(e.currentTarget.value)}
               />
             </div>
-            
+
             <div class="mb-6">
               <label class="block text-card-foreground text-sm font-bold mb-2" for="password">
                 密码
@@ -104,13 +104,13 @@ const Login = () => {
                 onInput={(e) => setPassword(e.currentTarget.value)}
               />
             </div>
-            
+
             {error() && (
               <div class="mb-4 text-destructive text-sm text-center">
                 {error()}
               </div>
             )}
-            
+
             <div class="flex items-center justify-center">
               <button
                 class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
@@ -126,4 +126,4 @@ const Login = () => {
   );
 };
 
-export default Login; 
+export default Login;

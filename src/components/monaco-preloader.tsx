@@ -1,5 +1,4 @@
 import { onMount } from 'solid-js';
-import { configureMonaco } from '../utils/monaco-utils';
 
 /**
  * Monaco编辑器预加载组件
@@ -7,9 +6,6 @@ import { configureMonaco } from '../utils/monaco-utils';
  */
 const MonacoPreloader = () => {
   onMount(() => {
-    // 配置Monaco环境
-    configureMonaco();
-    
     // 预加载Monaco编辑器
     const preloadMonaco = async () => {
       try {
@@ -21,7 +17,7 @@ const MonacoPreloader = () => {
         console.error('Monaco编辑器预加载失败:', error);
       }
     };
-    
+
     // 使用requestIdleCallback在浏览器空闲时加载
     if ('requestIdleCallback' in window) {
       (window as any).requestIdleCallback(() => {
@@ -36,4 +32,4 @@ const MonacoPreloader = () => {
   return null;
 };
 
-export default MonacoPreloader; 
+export default MonacoPreloader;

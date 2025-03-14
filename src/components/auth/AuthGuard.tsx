@@ -27,4 +27,4 @@ const AuthGuard: Component<RouteSectionProps> = (props) => {
   return <div class="h-full">{location.pathname !== '/login' && props.children}</div>;
 };
 
-export default AuthGuard; 
+export default AuthGuard;

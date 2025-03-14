@@ -62,9 +62,9 @@ const DependencyPage = () => {
       setLoading(true);
       setError('');
       setInstallLog('正在执行...');
-      
+
       const registry = type === 'npm' ? npmRegistry() : pipRegistry();
-      const cmd = type === 'npm' 
+      const cmd = type === 'npm'
         ? `npm config set registry ${registry}`
         : `pip config set global.index-url ${registry}`;
 
@@ -115,7 +115,7 @@ const DependencyPage = () => {
       setError('');
       setInstallLog('正在执行...');
 
-      const cmd = type === 'npm' 
+      const cmd = type === 'npm'
         ? `npm ${isUninstall ? 'uninstall -g' : 'install -g --no-cache'} ${packageName}`
         : `pip ${isUninstall ? 'uninstall -y' : 'install --no-cache-dir'} ${packageName}`;
 
@@ -145,6 +145,44 @@ const DependencyPage = () => {
       }
     } catch (err) {
       setError(isUninstall ? '卸载失败' : '安装失败');
+      setInstallLog('网络错误');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 查看已安装的包列表
+  const handleListPackages = async (type: 'npm' | 'pip') => {
+    try {
+      setLoading(true);
+      setError('');
+      setInstallLog('正在获取包列表...');
+
+      const cmd = type === 'npm'
+        ? 'npm list -g --depth=0'
+        : 'pip list';
+
+      const response = await fetch('/api/cron/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: `list${type}`,
+          exec: cmd,
+          workdir: '',
+        }),
+      });
+
+      const data = await response.json();
+      if (data.code === 0) {
+        setInstallLog(data.data.output);
+      } else {
+        setError(data.message);
+        setInstallLog(data.message);
+      }
+    } catch (err) {
+      setError('获取包列表失败');
       setInstallLog('网络错误');
     } finally {
       setLoading(false);
@@ -212,6 +250,13 @@ const DependencyPage = () => {
                   >
                     卸载
                   </button>
+                  <button
+                    onClick={() => handleListPackages('pip')}
+                    disabled={loading()}
+                    class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 disabled:opacity-50"
+                  >
+                    查看
+                  </button>
                 </div>
               </div>
             </div>
@@ -264,6 +309,13 @@ const DependencyPage = () => {
                   >
                     卸载
                   </button>
+                  <button
+                    onClick={() => handleListPackages('npm')}
+                    disabled={loading()}
+                    class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 disabled:opacity-50"
+                  >
+                    查看
+                  </button>
                 </div>
               </div>
             </div>
@@ -282,4 +334,4 @@ const DependencyPage = () => {
   );
 };
 
-export default DependencyPage; 
+export default DependencyPage;

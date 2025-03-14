@@ -14,4 +14,4 @@ export const auth = {
     setIsAuthenticated(false);
   },
   getToken: () => localStorage.getItem('token'),
-}; 
+};

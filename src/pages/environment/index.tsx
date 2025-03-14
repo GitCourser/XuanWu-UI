@@ -1,6 +1,6 @@
-import { createSignal, createEffect, Component, onMount } from 'solid-js';
+import { createSignal, createEffect, Component } from 'solid-js';
 import { MonacoEditor } from 'solid-monaco';
-import { configureMonaco, getDefaultEditorOptions, setEditorTheme, getEditorTheme } from '../../utils/monaco-utils';
+import { getDefaultEditorOptions, setEditorTheme, getEditorTheme } from '../../utils/monaco-utils';
 import { useTheme } from '../../stores/theme';
 
 const EnvironmentPage: Component = () => {
@@ -10,11 +10,6 @@ const EnvironmentPage: Component = () => {
   const [saving, setSaving] = createSignal(false);
   const { isDark } = useTheme();
   const [successMessage, setSuccessMessage] = createSignal('');
-
-  // 初始化Monaco配置
-  onMount(() => {
-    configureMonaco();
-  });
 
   // 加载环境变量
   const loadEnvironment = async () => {

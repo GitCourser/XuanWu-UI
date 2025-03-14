@@ -1,6 +1,6 @@
-import { createSignal, createEffect, For, onMount } from 'solid-js';
+import { createSignal, createEffect, For } from 'solid-js';
 import { MonacoEditor } from 'solid-monaco';
-import { configureMonaco, getLanguageByExtension, getDefaultEditorOptions, setEditorTheme, getEditorTheme } from '../../utils/monaco-utils';
+import { getLanguageByExtension, getDefaultEditorOptions, setEditorTheme, getEditorTheme } from '../../utils/monaco-utils';
 import { useTheme } from '../../stores/theme';
 
 interface FileItem {
@@ -38,13 +38,9 @@ const FilePage = () => {
   const [showNewFolderDialog, setShowNewFolderDialog] = createSignal(false);
   const [newFolderName, setNewFolderName] = createSignal('');
   const [isDragging, setIsDragging] = createSignal(false);
+  const [wordWrap, setWordWrap] = createSignal(localStorage.getItem('editor_word_wrap') === 'true');
   const { isDark } = useTheme();
   const [successMessage, setSuccessMessage] = createSignal('');
-
-  // 初始化Monaco配置
-  onMount(() => {
-    configureMonaco();
-  });
 
   // 加载文件列表
   const loadFiles = async (path: string = '') => {
@@ -139,26 +135,28 @@ const FilePage = () => {
   };
 
   // 删除文件
-  const deleteFile = async () => {
-    if (!selectedFile()) {
-      setError('请先选择一个文件');
+  const deleteFile = async (isFolder: boolean = false) => {
+    const pathToDelete = isFolder ? currentPath() : selectedFile();
+    if (!pathToDelete) {
+      setError(isFolder ? '请先选择一个文件夹' : '请先选择一个文件');
       return;
     }
 
-    if (!confirm('确定要删除此文件吗？此操作不可恢复。')) {
+    if (!confirm(`确定要删除${isFolder ? '文件夹' : '文件'} "${pathToDelete}" 吗？此操作不可恢复。`)) {
       return;
     }
 
     try {
-      const filePath = selectedFile() as string;
-      const parentPath = filePath.split('/').slice(0, -1).join('/');
+      const parentPath = pathToDelete.split('/').slice(0, -1).join('/');
 
-      const response = await fetch(`/api/file/delete?path=${encodeURIComponent(filePath)}`);
+      const response = await fetch(`/api/file/delete?path=${encodeURIComponent(pathToDelete)}`);
       const data = await response.json();
       if (data.code === 0) {
-        // 如果删除的文件在当前目录下，刷新当前目录
-        // 否则刷新父目录
-        if (filePath.startsWith(currentPath())) {
+        // 如果删除的是文件夹，刷新父目录
+        // 如果删除的是文件且在当前目录下，刷新当前目录
+        if (isFolder) {
+          loadFiles(parentPath);
+        } else if (pathToDelete.startsWith(currentPath())) {
           loadFiles(currentPath());
         } else {
           loadFiles(parentPath);
@@ -166,10 +164,10 @@ const FilePage = () => {
         setSelectedFile(null);
         setFileContent('');
       } else {
-        setError('删除文件失败');
+        setError(isFolder ? '删除文件夹失败' : '删除文件失败');
       }
     } catch (err) {
-      setError('删除文件失败');
+      setError(isFolder ? '删除文件夹失败' : '删除文件失败');
     }
   };
 
@@ -313,7 +311,7 @@ const FilePage = () => {
       files.forEach(file => {
         formData.append('files[]', file);
       });
-      
+
       if (currentPath()) {
         formData.append('path', currentPath());
       }
@@ -355,13 +353,41 @@ const FilePage = () => {
     setIsDragging(false);
   };
 
+  // 复制当前路径
+  const copyCurrentPath = async () => {
+    try {
+      // 确保使用正斜杠
+      const normalizedPath = currentPath().replace(/\\/g, '/');
+      await navigator.clipboard.writeText(normalizedPath);
+      setSuccessMessage('路径已复制到剪贴板');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      setError('复制路径失败');
+    }
+  };
+
+  // 切换自动换行
+  const toggleWordWrap = () => {
+    const newValue = !wordWrap();
+    setWordWrap(newValue);
+    localStorage.setItem('editor_word_wrap', String(newValue));
+  };
+
+  // 获取编辑器配置
+  const getEditorOptions = () => {
+    return {
+      ...getDefaultEditorOptions(!isEditing()),
+      wordWrap: wordWrap() ? 'on' : 'off'
+    };
+  };
+
   return (
     <div>
       {/* 顶部操作栏 */}
       <div class="mb-6 flex justify-between items-center">
         <h2 class="text-2xl font-bold">文件管理</h2>
         <div class="flex space-x-2">
-          <button 
+          <button
             class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
             onClick={() => setShowNewFolderDialog(true)}
           >
@@ -376,28 +402,21 @@ const FilePage = () => {
                 下载
               </button>
               <button
-                class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                onClick={toggleEditMode}
+                class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+                onClick={() => deleteFile(false)}
+                disabled={!selectedFile()}
               >
-                {isEditing() ? '取消编辑' : '编辑'}
-              </button>
-              {isEditing() && (
-                <button
-                  class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                  onClick={saveFile}
-                  disabled={saving()}
-                >
-                  {saving() ? '保存中...' : '保存'}
-                </button>
-              )}
-              <button
-                class="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90"
-                onClick={deleteFile}
-              >
-                删除
+                删除文件
               </button>
             </>
           )}
+          <button
+            class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+            onClick={() => deleteFile(true)}
+            disabled={!currentPath() || (currentPath() === 'logs')}
+          >
+            删除文件夹
+          </button>
         </div>
       </div>
 
@@ -418,32 +437,43 @@ const FilePage = () => {
       {/* 文件管理器 */}
       <div class={`grid grid-cols-12 gap-6 ${successMessage() || error() ? 'h-[calc(100vh-12rem)]' : 'h-[calc(100vh-7rem)]'}`}>
         {/* 左侧文件树 */}
-        <div 
-          class={`col-span-4 bg-card rounded-lg shadow overflow-hidden flex flex-col ${
+        <div
+          class={`col-span-4 bg-card rounded-lg shadow overflow-hidden flex flex-col  ${
             isDragging() ? 'ring-2 ring-primary ring-offset-2' : ''
           }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div class="shrink-0 p-4 border-b border-border">
-            <button
-              class="text-sm text-blue-400 hover:underline"
-              onClick={() => loadFiles('')}
-            >
-              根目录
-            </button>
+          <div class="shrink-0 p-4 border-b border-border flex justify-between items-center">
+            <div class="flex items-center">
+              <button
+                class="text-sm text-blue-400 hover:underline"
+                onClick={() => loadFiles('')}
+              >
+                根目录
+              </button>
+              {currentPath() && (
+                <>
+                  <span class="mx-2">/</span>
+                  <span class="text-sm text-primary-foreground">
+                    {currentPath().replace(/\\/g, '/')}
+                  </span>
+                </>
+              )}
+            </div>
             {currentPath() && (
-              <>
-                <span class="mx-2">/</span>
-                <span class="text-sm text-primary-foreground">
-                  {currentPath()}
-                </span>
-              </>
+              <button
+                class="p-2 text-muted-foreground hover:text-primary"
+                onClick={copyCurrentPath}
+                title="复制当前路径"
+              >
+                📋
+              </button>
             )}
           </div>
 
-          <div class="flex-1 overflow-auto p-4">
+          <div class="flex-1 overflow-auto p-4 [&::-webkit-scrollbar]:w-3 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-thumb]:rounded-md">
             {loading() ? (
               <div class="text-center text-muted-foreground">
                 加载中...
@@ -460,6 +490,39 @@ const FilePage = () => {
 
         {/* 右侧文件内容 */}
         <div class="col-span-8 bg-card rounded-lg shadow overflow-hidden flex flex-col">
+          {selectedFile() && (
+            <div class="shrink-0 p-2 border-b border-border flex justify-between items-center">
+              <div class="flex gap-2">
+                <button
+                  class="px-3 py-1 text-sm bg-primary/90 text-primary-foreground rounded hover:bg-primary/50"
+                  onClick={toggleEditMode}
+                >
+                  {isEditing() ? '取消' : '编辑'}
+                </button>
+                {isEditing() && (
+                  <button
+                    class="px-3 py-1 text-sm bg-primary/90 text-primary-foreground rounded hover:bg-primary/50"
+                    onClick={saveFile}
+                    disabled={saving()}
+                  >
+                    {saving() ? '保存中...' : '保存'}
+                  </button>
+                )}
+              </div>
+              <div class="flex items-center gap-2">
+                <label class="inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    class="sr-only peer"
+                    checked={wordWrap()}
+                    onChange={toggleWordWrap}
+                  />
+                  <div class="relative w-11 h-6 bg-muted-foreground/30 peer-checked:bg-primary rounded-full peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                  <span class="ms-2 text-sm">自动换行</span>
+                </label>
+              </div>
+            </div>
+          )}
           <div class="flex-1 overflow-auto">
             {selectedFile() ? (
               loading() ? (
@@ -472,7 +535,7 @@ const FilePage = () => {
                   onChange={(value) => setFileContent(value)}
                   language={getCurrentLanguage()}
                   theme={getEditorTheme(isDark())}
-                  options={getDefaultEditorOptions(!isEditing())}
+                  options={getEditorOptions()}
                   onMount={handleEditorMount}
                 />
               )
@@ -490,7 +553,7 @@ const FilePage = () => {
 
       {/* 新建文件夹对话框 */}
       {showNewFolderDialog() && (
-        <div 
+        <div
           class="fixed inset-0 bg-black/50 flex items-center justify-center"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
@@ -529,4 +592,4 @@ const FilePage = () => {
   );
 };
 
-export default FilePage; 
+export default FilePage;

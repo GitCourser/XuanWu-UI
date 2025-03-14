@@ -112,7 +112,7 @@ const AppLayout: Component<Props> = (props) => {
               >
                 {isDark() ? '🌙' : '☀️'}
               </button>
-              
+
               <div class="relative flex-1">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu())}
@@ -120,7 +120,7 @@ const AppLayout: Component<Props> = (props) => {
                 >
                   {profile().username}
                 </button>
-                
+
                 <Show when={showUserMenu()}>
                   <div class="absolute bottom-full right-2 mb-1 w-[calc(100%-16px)] bg-popover border border-border rounded-lg shadow-lg">
                     <button
@@ -225,4 +225,4 @@ const AppLayout: Component<Props> = (props) => {
   );
 };
 
-export default AppLayout; 
+export default AppLayout;

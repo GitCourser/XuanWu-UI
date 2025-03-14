@@ -35,4 +35,4 @@ export const useTheme = () => {
     theme: () => isDark() ? 'dark' : 'light',
     toggleTheme: () => setIsDark(prev => !prev),
   };
-}; 
+};

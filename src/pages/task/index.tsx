@@ -1,9 +1,9 @@
-import { createSignal, createEffect, Show, For, onMount } from 'solid-js';
+import { createSignal, createEffect, Show, For } from 'solid-js';
 import { useTheme } from '../../stores/theme';
 import { Dialog } from '@kobalte/core';
 import { onCleanup } from 'solid-js';
 import { MonacoEditor } from 'solid-monaco';
-import { configureMonaco, getDefaultEditorOptions, setEditorTheme, getEditorTheme } from '../../utils/monaco-utils';
+import { getDefaultEditorOptions, setEditorTheme, getEditorTheme } from '../../utils/monaco-utils';
 
 interface Task {
   id: string;
@@ -52,11 +52,6 @@ const TaskPage = () => {
   });
   const { theme, isDark } = useTheme();
 
-  // 初始化Monaco配置
-  onMount(() => {
-    configureMonaco();
-  });
-
   // 计算最佳显示数量
   const calculatePageSize = () => {
     const viewportHeight = window.innerHeight;
@@ -70,10 +65,10 @@ const TaskPage = () => {
     const handleResize = () => {
       setPageSize(calculatePageSize());
     };
-    
+
     // 初始计算
     handleResize();
-    
+
     window.addEventListener('resize', handleResize);
     onCleanup(() => {
       window.removeEventListener('resize', handleResize);
@@ -187,7 +182,7 @@ const TaskPage = () => {
       setLogContent('正在执行...');
       setIsLogDialogOpen(true);
       setCurrentTaskName(customTask().name);
-      
+
       const response = await fetch('/api/cron/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -195,7 +190,7 @@ const TaskPage = () => {
       });
       const data = await response.json();
       if (data.code === 0) {
-        setLogContent(data.data.output || '无输出');
+        setLogContent(data.data.output || data.data.message);
       } else {
         setError(data.message);
         setIsLogDialogOpen(false);
@@ -215,7 +210,7 @@ const TaskPage = () => {
       setLogContent('正在执行...');
       setIsLogDialogOpen(true);
       setCurrentTaskName(task.name);
-      
+
       const response = await fetch('/api/cron/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -223,7 +218,7 @@ const TaskPage = () => {
       });
       const data = await response.json();
       if (data.code === 0) {
-        setLogContent(data.data.output || '无输出');
+        setLogContent(data.data.output || data.data.message);
       } else {
         setError(data.message);
         setIsLogDialogOpen(false);
@@ -767,7 +762,7 @@ const TaskPage = () => {
       <Dialog.Root open={isLogDialogOpen()} onOpenChange={setIsLogDialogOpen}>
         <Dialog.Portal>
           <Dialog.Overlay class="fixed inset-0 bg-black/50" />
-          <Dialog.Content class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background p-6 rounded-lg shadow-lg w-[90vw] max-w-3xl max-h-[90vh] overflow-hidden">
+          <Dialog.Content class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background p-6 rounded-lg shadow-lg w-[90vw] max-w-6xl max-h-[90vh] overflow-hidden">
             <Dialog.Title class="text-lg font-bold mb-4">{currentTaskName()}</Dialog.Title>
             <div class="h-[65vh] overflow-hidden">
               <MonacoEditor
@@ -793,4 +788,4 @@ const TaskPage = () => {
   );
 };
 
-export default TaskPage; 
+export default TaskPage;

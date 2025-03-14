@@ -1,7 +1,7 @@
 declare module 'solid-monaco' {
   import { Component } from 'solid-js';
   import * as monaco from 'monaco-editor';
-  
+
   interface EditorProps {
     value: string;
     onChange?: (value: string, event: monaco.editor.IModelContentChangedEvent) => void;
@@ -20,4 +20,4 @@ declare module 'solid-monaco' {
   }
 
   export const MonacoEditor: Component<EditorProps>;
-} 
+}
