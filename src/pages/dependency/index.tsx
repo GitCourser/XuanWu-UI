@@ -1,5 +1,63 @@
 import { createSignal, onMount } from 'solid-js';
 
+// 从文件中删除指定内容
+const removeFromFile = async (path: string, contentToRemove: string) => {
+  try {
+    // 读取现有内容
+    const response = await fetch(`/api/file/content?path=${path}`);
+    const data = await response.json();
+    
+    if (data.code === 0 && data.data) {
+      // 将内容分割成数组并删除指定项
+      const items = data.data.split(' ').filter((item: string) => item !== contentToRemove);
+      
+      // 用空格重新连接并保存
+      await fetch('/api/file/edit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          path,
+          content: items.join(' ')
+        }),
+      });
+    }
+  } catch (err) {
+    console.error('删除依赖记录失败:', err);
+  }
+};
+
+// 追加内容到文件
+const appendToFile = async (path: string, newContent: string) => {
+  try {
+    // 读取现有内容
+    const response = await fetch(`/api/file/content?path=${path}`);
+    const data = await response.json();
+    
+    // 准备新内容
+    let finalContent = newContent;
+    if (data.code === 0 && data.data) {
+      // 如果文件有内容,添加空格
+      finalContent = `${data.data} ${newContent}`;
+    }
+    
+    // 保存文件
+    await fetch('/api/file/edit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        path,
+        content: finalContent
+      }),
+    });
+  } catch (err) {
+    console.error('记录依赖失败:', err);
+  }
+};
+
 const DependencyPage = () => {
   const [npmRegistry, setNpmRegistry] = createSignal('');
   const [pipRegistry, setPipRegistry] = createSignal('');
@@ -134,10 +192,25 @@ const DependencyPage = () => {
       const data = await response.json();
       if (data.code === 0) {
         setInstallLog(data.data.output);
-        if (type === 'npm') {
-          setNpmPackage('');
+        
+        // 安装成功且不是卸载操作时,记录到文件
+        if (!isUninstall) {
+          if (type === 'npm') {
+            await appendToFile('npm.txt', packageName);
+            setNpmPackage('');
+          } else {
+            await appendToFile('pip.txt', packageName);
+            setPipPackage('');
+          }
         } else {
-          setPipPackage('');
+          // 卸载成功时从记录中删除
+          if (type === 'npm') {
+            await removeFromFile('npm.txt', packageName);
+            setNpmPackage('');
+          } else {
+            await removeFromFile('pip.txt', packageName);
+            setPipPackage('');
+          }
         }
       } else {
         setError(data.message);

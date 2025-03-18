@@ -24,7 +24,7 @@ const AppLayout: Component<Props> = (props) => {
   const [isMenuOpen, setIsMenuOpen] = createSignal(false);
   const [showUserMenu, setShowUserMenu] = createSignal(false);
   const [profile, setProfile] = createSignal<Profile>({ username: '' });
-  const [isWindows, setIsWindows] = createSignal(false);
+  // const [isWindows, setIsWindows] = createSignal(false);
   const [version, setVersion] = createSignal('');
   const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
@@ -39,7 +39,7 @@ const AppLayout: Component<Props> = (props) => {
       if (data.code === 0) {
         setProfile(data.data.profile);
         setVersion(data.data.version);
-        setIsWindows(data.data.is_windows);
+        // setIsWindows(data.data.is_windows);
       }
     } catch (err) {
       console.error('Failed to load profile:', err);
@@ -91,7 +91,7 @@ const AppLayout: Component<Props> = (props) => {
             {/* 菜单 */}
             <nav class="flex-1 space-y-2">
               {menuItems
-                .filter(item => item.path !== '/environment' || !isWindows())
+                // .filter(item => item.path !== '/environment' || !isWindows())
                 .map((item) => (
                   <MenuItem {...item} />
                 ))}
@@ -182,7 +182,7 @@ const AppLayout: Component<Props> = (props) => {
               </div>
               <nav class="space-y-2">
                 {menuItems
-                  .filter(item => item.path !== '/environment' || !isWindows())
+                  // .filter(item => item.path !== '/environment' || !isWindows())
                   .map((item) => (
                     <A
                       href={item.path}

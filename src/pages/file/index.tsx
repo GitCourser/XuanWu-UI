@@ -18,6 +18,18 @@ interface UploadFailedItem {
   error: string;
 }
 
+// 禁用删除的文件列表
+const PROTECTED_FILES = [
+  'config.json',
+  'env.ini',
+  'notify.js',
+  'notify.py',
+  'npm.txt',
+  'pip.txt',
+  'logs/main.log', 
+  'logs/run_temp.log'
+];
+
 interface UploadResponse {
   code: number;
   data: {
@@ -38,6 +50,8 @@ const FilePage = () => {
   const [showNewFolderDialog, setShowNewFolderDialog] = createSignal(false);
   const [newFolderName, setNewFolderName] = createSignal('');
   const [isDragging, setIsDragging] = createSignal(false);
+  const [newFileName, setNewFileName] = createSignal('');
+  const [showRenameDialog, setShowRenameDialog] = createSignal(false);
   const [wordWrap, setWordWrap] = createSignal(localStorage.getItem('editor_word_wrap') === 'true');
   const { isDark } = useTheme();
   const [successMessage, setSuccessMessage] = createSignal('');
@@ -61,7 +75,7 @@ const FilePage = () => {
           updateFileTree(files(), path, processedFiles);
           setFiles([...files()]);
         }
-        setCurrentPath(path);
+        setCurrentPath(path.replace(/\\/g, '/'));
       } else {
         setError('加载文件列表失败');
       }
@@ -110,7 +124,7 @@ const FilePage = () => {
       const data = await response.json();
       if (data.code === 0) {
         setFileContent(data.data);
-        setSelectedFile(path);
+        setSelectedFile(path.replace(/\\/g, '/'));
       } else {
         setError(data.message);
       }
@@ -357,8 +371,8 @@ const FilePage = () => {
   const copyCurrentPath = async () => {
     try {
       // 确保使用正斜杠
-      const normalizedPath = currentPath().replace(/\\/g, '/');
-      await navigator.clipboard.writeText(normalizedPath);
+      // const normalizedPath = currentPath().replace(/\\/g, '/');
+      await navigator.clipboard.writeText(currentPath());
       setSuccessMessage('路径已复制到剪贴板');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
@@ -381,6 +395,43 @@ const FilePage = () => {
     };
   };
 
+  // 重命名文件夹
+  const renameFile = async () => {
+    if (!currentPath() || !newFileName()) {
+      setError('请先进入文件夹并输入新名称');
+      return;
+    }
+
+    try {
+      const currentFolderPath = currentPath();
+      const parentPath = currentFolderPath.substring(0, currentFolderPath.lastIndexOf('/'));
+      const newPath = parentPath ? `${parentPath}/${newFileName()}` : newFileName();
+
+      const response = await fetch('/api/file/rename', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          path: currentFolderPath,
+          new_path: newPath
+        }),
+      });
+
+      const data = await response.json();
+      if (data.code === 0) {
+        setShowRenameDialog(false);
+        setNewFileName('');
+        // 重名名成功后加载父目录
+        loadFiles(parentPath);
+      } else {
+        setError(data.message || '重命名失败');
+      }
+    } catch (err) {
+      setError('重命名失败');
+    }
+  };
+
   return (
     <div>
       {/* 顶部操作栏 */}
@@ -391,7 +442,7 @@ const FilePage = () => {
             class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
             onClick={() => setShowNewFolderDialog(true)}
           >
-            新建文件夹
+            新建目录
           </button>
           {selectedFile() && (
             <>
@@ -404,19 +455,33 @@ const FilePage = () => {
               <button
                 class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
                 onClick={() => deleteFile(false)}
-                disabled={!selectedFile()}
+                disabled={PROTECTED_FILES.includes(selectedFile() || '')}
               >
-                删除文件
+                删除
               </button>
             </>
           )}
-          <button
-            class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
-            onClick={() => deleteFile(true)}
-            disabled={!currentPath() || (currentPath() === 'logs')}
-          >
-            删除文件夹
-          </button>
+          {currentPath() && (
+            <>
+              <button
+                class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+                onClick={() => {
+                  setNewFileName(currentPath().split('/').pop() || '');
+                  setShowRenameDialog(true);
+                }}
+                disabled={currentPath() === 'logs'}
+              >
+                目录改名
+              </button>
+              <button
+                class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+                onClick={() => deleteFile(true)}
+                disabled={currentPath() === 'logs'}
+              >
+                删除目录
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -457,7 +522,7 @@ const FilePage = () => {
                 <>
                   <span class="mx-2">/</span>
                   <span class="text-sm text-primary-foreground">
-                    {currentPath().replace(/\\/g, '/')}
+                    {currentPath()}
                   </span>
                 </>
               )}
@@ -581,6 +646,44 @@ const FilePage = () => {
                 type="submit"
                 class="px-4 py-2 bg-primary text-white rounded-md text-sm"
                 onClick={createNewFolder}
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 重命名对话框 */}
+      {showRenameDialog() && (
+        <div
+          class="fixed inset-0 bg-black/50 flex items-center justify-center"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowRenameDialog(false);
+              setNewFileName('');
+            }
+          }}
+        >
+          <div class="bg-background p-6 rounded-lg shadow-lg w-[80vw] max-w-md">
+            <h3 class="text-lg font-semibold mb-4">重命名文件夹</h3>
+            <input
+              type="text"
+              class="w-full px-3 py-2 rounded-md border border-border bg-background"
+              placeholder="请输入新名称"
+              value={newFileName()}
+              onInput={(e) => setNewFileName(e.currentTarget.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  renameFile();
+                }
+              }}
+            />
+            <div class="flex justify-end gap-2 mt-4">
+              <button
+                type="submit"
+                class="px-4 py-2 bg-primary text-white rounded-md text-sm"
+                onClick={renameFile}
               >
                 确定
               </button>

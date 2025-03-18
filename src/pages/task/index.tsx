@@ -558,9 +558,7 @@ const TaskPage = () => {
                   />
                   <p class="mt-1 text-xs text-muted-foreground">
                     支持所有命令行的命令，如：<br/>
-                    ls，dir，sh test.sh，test.bat，python test.py，node tsst.js<br/>
-                    如设置了Linux环境变量，要让脚本能读取，需在命令前加"xw "，如：<br/>
-                    xw python test.py，xw node tsst.js
+                    ls，dir，sh test.sh，test.bat，python test.py，node tsst.js
                   </p>
                 </div>
                 <div>

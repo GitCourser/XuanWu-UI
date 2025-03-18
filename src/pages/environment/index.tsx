@@ -15,12 +15,12 @@ const EnvironmentPage: Component = () => {
   const loadEnvironment = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/file/content?path=Env.sh');
+      const response = await fetch('/api/file/content?path=env.ini');
       const data = await response.json();
       if (data.code === 0) {
         setContent(data.data);
       } else if (data.message === '文件不存在') {
-        setContent('# Linux 环境变量示例:\n# export MY_VAR=my_value\n# export MY_VAR2="my value with space"\n# 变量名前关键字"export ", 等号前后不要有空格, 变量值中有空格的要用引号\n');
+        setContent('# 等号前后不要有空格, 值不要用引号, 引号也会当成值.\n# 示例:\n# MY_VAR1=my_value\n# MY_VAR2=my value with space\n');
       } else {
         setError(data.message);
       }
@@ -43,7 +43,7 @@ const EnvironmentPage: Component = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          path: 'Env.sh',
+          path: 'env.ini',
           content: content()
         }),
       });
@@ -107,7 +107,7 @@ const EnvironmentPage: Component = () => {
           <MonacoEditor
             value={content()}
             onChange={(value) => setContent(value)}
-            language="shell"
+            language="ini"
             theme={getEditorTheme(isDark())}
             options={getDefaultEditorOptions(false)}
             onMount={handleEditorMount}
