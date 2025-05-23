@@ -558,7 +558,7 @@ const TaskPage = () => {
                   />
                   <p class="mt-1 text-xs text-muted-foreground">
                     支持所有命令行的命令，如：<br/>
-                    ls，dir，sh test.sh，test.bat，python test.py，node tsst.js
+                    ls，dir，sh test.sh，test.bat，python test.py，node test.js
                   </p>
                 </div>
                 <div>
@@ -572,10 +572,9 @@ const TaskPage = () => {
                     class="w-full px-3 py-2 rounded-md border border-border bg-background"
                   />
                   <p class="mt-1 text-xs text-muted-foreground">
-                    默认目录：data/<br/>
-                    相对路径：scripts 等于 data/scripts<br/>
-                    绝对路径：/etc/config 或 c:/windows/cmd<br/>
-                    路径分隔不分系统统一用正斜杠"/"
+                    在文件管理的就用相对路径，根目录不用填留空，子目录直接用目录树上方的“复制”按钮复制<br/>
+                    不在文件管理的就用绝对路径：/etc/config 或 c:/windows/cmd<br/>
+                    路径分隔不分系统统一用正斜杠“/”
                   </p>
                 </div>
                 <div>

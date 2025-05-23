@@ -55,6 +55,54 @@ const FilePage = () => {
   const [wordWrap, setWordWrap] = createSignal(localStorage.getItem('editor_word_wrap') === 'true');
   const { isDark } = useTheme();
   const [successMessage, setSuccessMessage] = createSignal('');
+  let fileInputRef: HTMLInputElement | undefined;
+
+  // 处理文件上传
+  const handleFileUpload = async (files: File[]) => {
+    if (files.length === 0) return;
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      const formData = new FormData();
+      files.forEach(file => {
+        formData.append('files[]', file);
+      });
+
+      if (currentPath()) {
+        formData.append('path', currentPath());
+      }
+
+      const response = await fetch('/api/file/batch-upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data: UploadResponse = await response.json();
+      if (data.code === 0) {
+        if (data.data.success.length > 0) {
+          setSuccessMessage(`上传成功：${data.data.success.join(', ')}`);
+        }
+        if (data.data.failed && data.data.failed.length > 0) {
+          setError(`上传失败：${data.data.failed.map(item => item.name).join(', ')}`);
+        }
+        loadFiles(currentPath());
+      } else {
+        setError('上传失败');
+      }
+    } catch (err) {
+      setError('文件上传失败');
+    }
+  };
+
+  // 处理文件选择
+  const handleFileSelect = (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    if (input.files) {
+      handleFileUpload(Array.from(input.files));
+      input.value = ''; // 清空选择，允许重复选择同一文件
+    }
+  };
 
   // 加载文件列表
   const loadFiles = async (path: string = '') => {
@@ -314,44 +362,9 @@ const FilePage = () => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    setError('');
-    setSuccessMessage('');
 
     const files = Array.from(e.dataTransfer?.files || []);
-    if (files.length === 0) return;
-
-    try {
-      const formData = new FormData();
-      files.forEach(file => {
-        formData.append('files[]', file);
-      });
-
-      if (currentPath()) {
-        formData.append('path', currentPath());
-      }
-
-      const response = await fetch('/api/file/batch-upload', {
-        method: 'POST',
-        body: formData
-      });
-
-      const data: UploadResponse = await response.json();
-      if (data.code === 0) {
-        // 分别显示成功和失败消息
-        if (data.data.success.length > 0) {
-          setSuccessMessage(`上传成功：${data.data.success.join(', ')}`);
-        }
-        if (data.data.failed && data.data.failed.length > 0) {
-          setError(`上传失败：${data.data.failed.map(item => item.name).join(', ')}`);
-        }
-        // 刷新当前目录
-        loadFiles(currentPath());
-      } else {
-        setError('上传失败');
-      }
-    } catch (err) {
-      setError('文件上传失败');
-    }
+    handleFileUpload(files);
   };
 
   // 处理拖放相关事件
@@ -450,6 +463,19 @@ const FilePage = () => {
       <div class="mb-6 flex justify-between items-center">
         <h2 class="text-2xl font-bold">文件管理</h2>
         <div class="flex space-x-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            class="hidden"
+            multiple
+            onChange={handleFileSelect}
+          />
+          <button
+            class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+            onClick={() => fileInputRef?.click()}
+          >
+            上传文件
+          </button>
           <button
             class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
             onClick={() => setShowNewFolderDialog(true)}
@@ -619,7 +645,7 @@ const FilePage = () => {
             ) : (
               <div class="p-8 text-center text-muted-foreground">
                 选择文件查看内容<br/>
-                拖放文件到目录树上传<br/>
+                拖放文件到目录树或点击上传按钮上传文件<br/>
                 根目录是指玄武程序的数据目录<br/>
                 新建与上传路径就是目录树上面显示的打开路径
               </div>
