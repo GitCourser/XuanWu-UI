@@ -4,6 +4,10 @@ import { Dialog } from '@kobalte/core';
 import { onCleanup } from 'solid-js';
 import { MonacoEditor } from 'solid-monaco';
 import { getDefaultEditorOptions, setEditorTheme, getEditorTheme } from '../../utils/monaco-utils';
+import { checkDefaultPassword } from '../../services/auth';
+import { batchAddTasks, getTaskList } from '../../services/task';
+import { isLocalOrPrivateAddress, getCurrentHostname } from '../../utils/network';
+import DefaultPasswordWarning from '../../components/ui/default-password-warning';
 
 interface Task {
   id: string;
@@ -51,6 +55,15 @@ const TaskPage = () => {
     workdir: ''
   });
   const { theme, isDark } = useTheme();
+  
+  // 默认密码警告相关状态
+  const [showDefaultPasswordWarning, setShowDefaultPasswordWarning] = createSignal(false);
+  
+  // 导入导出相关状态
+  const [isImportDialogOpen, setIsImportDialogOpen] = createSignal(false);
+  const [importFile, setImportFile] = createSignal<File | null>(null);
+  const [importError, setImportError] = createSignal('');
+  const [importing, setImporting] = createSignal(false);
 
   // 计算最佳显示数量
   const calculatePageSize = () => {
@@ -74,6 +87,22 @@ const TaskPage = () => {
       window.removeEventListener('resize', handleResize);
     });
   });
+
+  // 检查默认密码
+  const checkDefaultPasswordStatus = async () => {
+    try {
+      const isDefault = await checkDefaultPassword();
+      const hostname = getCurrentHostname();
+      const isLocalAccess = isLocalOrPrivateAddress(hostname);
+      
+      // 如果是默认密码且不是内网访问，显示警告
+      if (isDefault && !isLocalAccess) {
+        setShowDefaultPasswordWarning(true);
+      }
+    } catch (error) {
+      console.error('检查默认密码状态失败:', error);
+    }
+  };
 
   // 加载任务列表
   const loadTasks = async () => {
@@ -246,9 +275,114 @@ const TaskPage = () => {
     }
   };
 
+  // 导出任务
+  const handleExportTasks = async () => {
+    try {
+      const data = await getTaskList();
+      if (data.code === 0 && data.data) {
+        // 转换为导入格式
+        const exportData = {
+          tasks: data.data.map((task: any) => ({
+            name: task.name,
+            times: task.times,
+            workdir: task.workdir,
+            exec: task.exec,
+            enable: task.enable
+          }))
+        };
+        
+        // 创建下载链接
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+          type: 'application/json'
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tasks_export_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        setError('导出任务失败: ' + data.message);
+      }
+    } catch (err) {
+      setError('导出任务失败');
+    }
+  };
+
+  // 处理文件选择
+  const handleFileSelect = (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (file) {
+      setImportFile(file);
+      setImportError('');
+    }
+  };
+
+  // 导入任务
+  const handleImportTasks = async () => {
+    const file = importFile();
+    if (!file) {
+      setImportError('请选择要导入的文件');
+      return;
+    }
+
+    try {
+      setImporting(true);
+      setImportError('');
+
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      if (!data.tasks || !Array.isArray(data.tasks)) {
+        setImportError('文件格式错误：缺少tasks数组');
+        return;
+      }
+
+      // 验证任务数据格式
+      for (const task of data.tasks) {
+        if (!task.name || !task.exec || !Array.isArray(task.times)) {
+          setImportError('文件格式错误：任务数据不完整');
+          return;
+        }
+      }
+
+      const result = await batchAddTasks(data.tasks);
+      
+      if (result.code === 0) {
+        const { success_count, failed_count, failed } = result.data;
+        let message = `导入完成！成功: ${success_count}个`;
+        
+        if (failed_count > 0) {
+          message += `，失败: ${failed_count}个`;
+          const failedNames = failed.map(f => f.task.name).join(', ');
+          message += `\n失败的任务: ${failedNames}`;
+        }
+        
+        alert(message);
+        setIsImportDialogOpen(false);
+        setImportFile(null);
+        loadTasks(); // 重新加载任务列表
+      } else {
+        setImportError('导入失败: ' + result.message);
+      }
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        setImportError('文件格式错误：不是有效的JSON文件');
+      } else {
+        setImportError('导入失败: ' + (err as Error).message);
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
+
   // 首次加载
   createEffect(() => {
     loadTasks();
+    checkDefaultPasswordStatus();
   });
 
   // 获取当前页的任务
@@ -275,7 +409,7 @@ const TaskPage = () => {
       {/* 顶部操作栏 */}
       <div class="mb-6 flex justify-between items-center">
         <h2 class="text-2xl font-bold">任务管理</h2>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
           <button
             class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
             onClick={() => {
@@ -294,6 +428,18 @@ const TaskPage = () => {
             }}
           >
             自定义执行
+          </button>
+          <button
+            class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
+            onClick={() => setIsImportDialogOpen(true)}
+          >
+            导入
+          </button>
+          <button
+            class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
+            onClick={handleExportTasks}
+          >
+            导出
           </button>
         </div>
       </div>
@@ -776,6 +922,73 @@ const TaskPage = () => {
                 onClick={() => setIsLogDialogOpen(false)}
               >
                 关闭
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* 默认密码警告弹窗 */}
+      <DefaultPasswordWarning open={showDefaultPasswordWarning()} />
+
+      {/* 导入任务弹窗 */}
+      <Dialog.Root open={isImportDialogOpen()} onOpenChange={setIsImportDialogOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay class="fixed inset-0 bg-black/50" />
+          <Dialog.Content class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background p-6 rounded-lg shadow-lg w-[90vw] max-w-md">
+            <Dialog.Title class="text-lg font-bold mb-4">导入任务</Dialog.Title>
+            
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium mb-2">选择文件</label>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileSelect}
+                  class="w-full px-3 py-2 rounded-md border border-border bg-background file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                />
+                <p class="mt-1 text-xs text-muted-foreground">
+                  请选择通过"导出任务"功能生成的JSON文件
+                </p>
+              </div>
+
+              {importFile() && (
+                <div class="p-3 bg-muted rounded-md">
+                  <p class="text-sm">
+                    <strong>已选择文件:</strong> {importFile()!.name}
+                  </p>
+                  <p class="text-xs text-muted-foreground mt-1">
+                    文件大小: {(importFile()!.size / 1024).toFixed(2)} KB
+                  </p>
+                </div>
+              )}
+
+              {importError() && (
+                <div class="p-3 bg-destructive/10 text-destructive rounded-md text-sm">
+                  {importError()}
+                </div>
+              )}
+            </div>
+
+            <div class="flex justify-end gap-2 mt-6">
+              <button
+                type="button"
+                class="px-4 py-2 text-sm"
+                onClick={() => {
+                  setIsImportDialogOpen(false);
+                  setImportFile(null);
+                  setImportError('');
+                }}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                class="px-4 py-2 bg-primary text-white rounded-md text-sm disabled:opacity-50"
+                disabled={!importFile() || importing()}
+                onClick={handleImportTasks}
+              >
+                {importing() ? '导入中...' : '开始导入'}
               </button>
             </div>
           </Dialog.Content>
