@@ -1,6 +1,7 @@
 import { A, useLocation, useNavigate } from '@solidjs/router';
 import { createSignal, Show, type Component, onMount } from 'solid-js';
 import { useTheme } from '../../stores/theme';
+import { useUser } from '../../stores/user';
 import pkg from '../../../package.json';
 import MonacoPreloader from '../monaco-preloader';
 
@@ -12,10 +13,6 @@ const menuItems = [
   { path: '/settings', label: '系统设置', icon: '🔧' },
 ];
 
-interface Profile {
-  username: string;
-}
-
 interface Props {
   children?: any;
 }
@@ -23,34 +20,20 @@ interface Props {
 const AppLayout: Component<Props> = (props) => {
   const [isMenuOpen, setIsMenuOpen] = createSignal(false);
   const [showUserMenu, setShowUserMenu] = createSignal(false);
-  const [profile, setProfile] = createSignal<Profile>({ username: '' });
-  // const [isWindows, setIsWindows] = createSignal(false);
-  const [version, setVersion] = createSignal('');
+  const [isMobileView, setIsMobileView] = createSignal(false);
   const { isDark, toggleTheme } = useTheme();
+  const { profile, version, clearProfile } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
 
   const isActive = (path: string) => location.pathname === path;
-
-  const loadProfile = async () => {
-    try {
-      const response = await fetch('/api/user/profile');
-      const data = await response.json();
-      if (data.code === 0) {
-        setProfile(data.data.profile);
-        setVersion(data.data.version);
-        // setIsWindows(data.data.is_windows);
-      }
-    } catch (err) {
-      console.error('Failed to load profile:', err);
-    }
-  };
 
   const handleLogout = async () => {
     try {
       const response = await fetch('/api/auth/logout');
       const data = await response.json();
       if (data.code === 0) {
+        clearProfile();
         navigate('/login');
       }
     } catch (err) {
@@ -59,7 +42,15 @@ const AppLayout: Component<Props> = (props) => {
   };
 
   onMount(() => {
-    loadProfile();
+    // 检测是否为移动端视图
+    const checkMobileView = () => {
+      setIsMobileView(window.innerWidth < 768);
+    };
+    
+    checkMobileView();
+    window.addEventListener('resize', checkMobileView);
+    
+    return () => window.removeEventListener('resize', checkMobileView);
   });
 
   const MenuItem = (props: { path: string; label: string; icon: string }) => (
@@ -79,7 +70,8 @@ const AppLayout: Component<Props> = (props) => {
   return (
     <div class="min-h-screen bg-background">
       {/* PC端布局 */}
-      <div class="hidden md:flex">
+      <Show when={!isMobileView()}>
+      <div class="flex">
         {/* 左侧边栏 */}
         <aside class="w-64 min-h-screen bg-card border-r border-border">
           <div class="flex flex-col h-full p-4">
@@ -146,9 +138,11 @@ const AppLayout: Component<Props> = (props) => {
           </div>
         </main>
       </div>
+      </Show>
 
       {/* 移动端布局 */}
-      <div class="md:hidden">
+      <Show when={isMobileView()}>
+      <div>
         {/* 顶部导航栏 */}
         <header class="h-16 border-b border-border px-4 flex items-center justify-between">
           <img src="/logo.png" alt="Logo" class="h-6" />
@@ -219,6 +213,7 @@ const AppLayout: Component<Props> = (props) => {
           {props.children}
         </main>
       </div>
+      </Show>
       {/* Monaco编辑器预加载 */}
       <MonacoPreloader />
     </div>

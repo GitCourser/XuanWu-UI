@@ -1,7 +1,7 @@
 import { Router, Route } from '@solidjs/router';
 import { lazy } from 'solid-js';
 import './styles/globals.css';
-import AuthGuard from './components/auth/AuthGuard';
+import AuthGuard from './components/auth/auth-guard';
 
 // 布局
 const AppLayout = lazy(() => import('./components/layout/app-layout'));

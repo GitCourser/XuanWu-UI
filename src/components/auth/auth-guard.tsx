@@ -1,42 +1,31 @@
-import { Component, JSX } from 'solid-js';
-import { useNavigate } from '@solidjs/router';
-import { createEffect, createSignal, Show, createRoot } from 'solid-js';
+import { Component, createEffect } from 'solid-js';
+import { useNavigate, useLocation, RouteSectionProps } from '@solidjs/router';
+import { useUser } from '../../stores/user';
 
-interface Props {
-  children: JSX.Element;
-}
-
-const AuthGuard: Component<Props> = (props) => {
+const AuthGuard: Component<RouteSectionProps> = (props) => {
   const navigate = useNavigate();
-  const [isAuthenticated, setIsAuthenticated] = createSignal<boolean | null>(null);
+  const location = useLocation();
+  const { loadProfile, isLoaded } = useUser();
 
   const checkAuth = async () => {
     try {
-      const response = await fetch('/api/auth/check');
-      const data = await response.json();
-      const isAuth = data.code === 0;
-      setIsAuthenticated(isAuth);
-
-      if (!isAuth) {
-        navigate('/login', { replace: true });
+      // 只在未加载时才请求
+      if (!isLoaded()) {
+        await loadProfile();
       }
     } catch (err) {
-      setIsAuthenticated(false);
       navigate('/login', { replace: true });
     }
   };
 
-  createRoot(() => {
-    createEffect(() => {
+  createEffect(() => {
+    // 监听路由变化，每次路由变化时检查授权
+    if (location.pathname !== '/login') {
       checkAuth();
-    });
+    }
   });
 
-  return (
-    <Show when={isAuthenticated()} fallback={<div>正在检查登录状态...</div>}>
-      {props.children}
-    </Show>
-  );
+  return <div class="h-full">{location.pathname !== '/login' && props.children}</div>;
 };
 
 export default AuthGuard;

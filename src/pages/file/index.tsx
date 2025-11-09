@@ -55,6 +55,8 @@ const FilePage = () => {
   const [wordWrap, setWordWrap] = createSignal(localStorage.getItem('editor_word_wrap') === 'true');
   const { isDark } = useTheme();
   const [successMessage, setSuccessMessage] = createSignal('');
+  const [isLogDialogOpen, setIsLogDialogOpen] = createSignal(false);
+  const [logContent, setLogContent] = createSignal('');
   let fileInputRef: HTMLInputElement | undefined;
 
   // 处理文件上传
@@ -65,12 +67,18 @@ const FilePage = () => {
 
     try {
       const formData = new FormData();
+      const path = currentPath();
+      
+      // 如果path为空且文件名为config.json，则跳过
       files.forEach(file => {
+        if (!path && file.name === 'config.json') {
+          return; // 跳过config.json
+        }
         formData.append('files[]', file);
       });
 
-      if (currentPath()) {
-        formData.append('path', currentPath());
+      if (path) {
+        formData.append('path', path);
       }
 
       const response = await fetch('/api/file/batch-upload', {
@@ -353,8 +361,69 @@ const FilePage = () => {
   });
 
   // 编辑器挂载
-  const handleEditorMount = (monaco: any) => {
+  const handleEditorMount = (monaco: any, editor: any) => {
     setEditorTheme(monaco, isDark());
+    editor.setScrollPosition({
+      scrollTop: editor.getScrollHeight()
+    });
+  };
+
+  // 判断文件是否可运行
+  const isExecutableFile = () => {
+    const filePath = selectedFile();
+    if (!filePath) return false;
+    return /\.(sh|js|py)$/i.test(filePath);
+  };
+
+  // 获取执行命令前缀
+  const getExecPrefix = (filePath: string) => {
+    if (filePath.endsWith('.sh')) return 'sh ';
+    if (filePath.endsWith('.js')) return 'node ';
+    if (filePath.endsWith('.py')) return 'python ';
+    return '';
+  };
+
+  // 获取文件所在目录
+  const getFileDirectory = (filePath: string) => {
+    const parts = filePath.split('/');
+    parts.pop(); // 移除文件名
+    return parts.join('/');
+  };
+
+  // 运行文件
+  const handleRunFile = async () => {
+    const filePath = selectedFile();
+    if (!filePath) return;
+
+    try {
+      setLogContent('正在执行...');
+      setIsLogDialogOpen(true);
+
+      const fileName = filePath.split('/').pop() || '';
+      const execPrefix = getExecPrefix(filePath);
+      const workdir = getFileDirectory(filePath);
+
+      const response = await fetch('/api/cron/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: fileName.replace(/\.(sh|js|py)$/i, ''),
+          exec: execPrefix + fileName,
+          workdir: workdir
+        }),
+      });
+
+      const data = await response.json();
+      if (data.code === 0) {
+        setLogContent(data.data.output || data.data.message);
+      } else {
+        setError(data.message);
+        setIsLogDialogOpen(false);
+      }
+    } catch (err) {
+      setError('执行文件失败');
+      setIsLogDialogOpen(false);
+    }
   };
 
   // 处理文件拖放
@@ -595,7 +664,15 @@ const FilePage = () => {
         <div class="col-span-8 bg-card rounded-lg shadow overflow-hidden flex flex-col">
           {selectedFile() && (
             <div class="shrink-0 p-2 border-b border-border flex justify-between items-center">
-              <div class="flex gap-2">
+              <div class="flex gap-2 items-center flex-1">
+                {isExecutableFile() && (
+                  <button
+                    class="px-3 py-1 text-sm bg-green-500/90 text-white rounded hover:bg-green-500/70"
+                    onClick={handleRunFile}
+                  >
+                    ▶️ 运行
+                  </button>
+                )}
                 <button
                   class="px-3 py-1 text-sm bg-primary/90 text-primary-foreground rounded hover:bg-primary/50"
                   onClick={toggleEditMode}
@@ -611,6 +688,9 @@ const FilePage = () => {
                     {saving() ? '保存中...' : '保存'}
                   </button>
                 )}
+                <span class="text-sm text-muted-foreground ml-2 truncate">
+                  {selectedFile()?.split('/').pop()}
+                </span>
               </div>
               <div class="flex items-center gap-2">
                 <label class="inline-flex items-center cursor-pointer">
@@ -724,6 +804,40 @@ const FilePage = () => {
                 onClick={renameFile}
               >
                 确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 日志弹窗 */}
+      {isLogDialogOpen() && (
+        <div
+          class="fixed inset-0 bg-black/50 flex items-center justify-center"
+    
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsLogDialogOpen(false);
+            }
+          }}
+        >
+          <div class="bg-background p-6 rounded-lg shadow-lg w-[90vw] max-w-6xl max-h-[90vh] overflow-hidden">
+            <h3 class="text-lg font-semibold mb-4">运行结果</h3>
+            <div class="h-[65vh] overflow-hidden">
+              <MonacoEditor
+                value={logContent()}
+                language="xwlog"
+                theme={getEditorTheme(isDark())}
+                options={getDefaultEditorOptions(true)}
+                onMount={handleEditorMount}
+              />
+            </div>
+            <div class="flex justify-end mt-4">
+              <button
+                class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
+                onClick={() => setIsLogDialogOpen(false)}
+              >
+                关闭
               </button>
             </div>
           </div>

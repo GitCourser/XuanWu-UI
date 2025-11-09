@@ -1,6 +1,7 @@
 import { createSignal, createEffect } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { sha256 } from '../../utils/crypto';
+import { useUser } from '../../stores/user';
 
 interface Profile {
   username: string;
@@ -10,6 +11,7 @@ interface Profile {
 
 const SettingsPage = () => {
   const navigate = useNavigate();
+  const { profile: globalProfile, loadProfile: loadGlobalProfile, clearProfile } = useUser();
   const [profile, setProfile] = createSignal<Profile>({
     username: '',
     cookie_expire_days: 30,
@@ -27,12 +29,15 @@ const SettingsPage = () => {
   const loadProfile = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/user/profile');
-      const data = await response.json();
-      if (data.code === 0) {
-        setProfile(data.data.profile);
-      } else {
-        setError(data.message);
+      // 使用全局 store 的数据，避免重复请求
+      await loadGlobalProfile();
+      const data = globalProfile();
+      if (data.username) {
+        setProfile({
+          username: data.username,
+          cookie_expire_days: data.cookie_expire_days || 30,
+          log_clean_days: data.log_clean_days || 7,
+        });
       }
     } catch (err) {
       setError('加载配置失败');
@@ -80,9 +85,14 @@ const SettingsPage = () => {
       if (data.code !== 0) {
         setError(data.message);
       } else {
+        // 清除全局缓存，强制重新加载
+        clearProfile();
         // 如果修改了用户名或密码，跳转到登录页
         if (payload.username || payload.password) {
           navigate('/login');
+        } else {
+          // 重新加载配置
+          await loadProfile();
         }
       }
     } catch (err) {
